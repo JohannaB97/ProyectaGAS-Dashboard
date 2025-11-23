@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Modelos grandes (opcional - no subir si son muy pesados)
+# *.pkl
+# *.keras
+# *.h5
+
+# Datos sensibles
+*.csv
+*.xlsx
+config.py
+secrets.toml
+
+# Logs
+*.log
