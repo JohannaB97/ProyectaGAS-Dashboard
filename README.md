@@ -20,7 +20,7 @@ Dashboard interactivo para proyección de precios internacionales y demanda desa
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/tu-usuario/proyectagas-dashboard.git
+git clone https://github.com/JohannaB97/ProyectaGAS-Dashboard.git
 cd proyectagas-dashboard
 
 # Instalar dependencias
