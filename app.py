@@ -663,6 +663,6 @@ st.markdown("""
 <div style='text-align: center; color: gray;'>
     <p><b>ProyectaGAS</b> - Sistema de Proyección de Demanda de Gas Natural</p>
     <p>11 modelos XGBoost entrenados | 8 sectores independientes | 2 zonas geográficas</p>
-    <p>Universidad del Norte | 2024</p>
+    <p>Universidad del Norte | 2025</p>
 </div>
 """, unsafe_allow_html=True)
