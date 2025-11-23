@@ -154,8 +154,8 @@ st.sidebar.markdown("**🏭 Sectores Analizados:** 8")
 st.sidebar.markdown("**🗺️ Zonas:** 2 (Costa/Interior)")
 st.sidebar.markdown("**🤖 Modelo:** XGBoost")
 st.sidebar.markdown("---")
-st.sidebar.markdown("**👩‍🎓 Johanna**")
-st.sidebar.markdown("Universidad del Norte • 2024")
+st.sidebar.markdown("**👩‍🎓 Johanna Blanquicet Pereira**")
+st.sidebar.markdown("Universidad del Norte • 2025")
 
 # ============================================================================
 # TABS
