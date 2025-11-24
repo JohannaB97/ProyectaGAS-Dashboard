@@ -1,5 +1,5 @@
 """
-ProyectaGAS - Dashboard Empresarial
+PrediGas - Dashboard Empresarial
 Proyecciones de Demanda de Gas Natural y Precios Internacionales
 """
 
@@ -15,7 +15,7 @@ import numpy as np
 # ===========================================================================
 
 st.set_page_config(
-    page_title="ProyectaGAS | Dashboard Ejecutivo",
+    page_title="PrediGAS | Dashboard Ejecutivo",
     page_icon="⛽",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -47,7 +47,7 @@ metricas_desagregado['Variable'] = metricas_desagregado['Variable'].str.strip()
 # SIDEBAR
 # ===========================================================================
 
-st.sidebar.title("⛽ ProyectaGAS")
+st.sidebar.title("⛽ PrediGAS")
 st.sidebar.markdown("### Dashboard Ejecutivo")
 st.sidebar.markdown("---")
 
@@ -121,6 +121,18 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.header("Resumen Ejecutivo - Proyecciones Clave")
     
+    # CSS para métricas más compactas
+    st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] {
+        font-size: 24px;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 13px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # KPIs Principales
     col1, col2, col3, col4 = st.columns(4)
     
@@ -130,11 +142,10 @@ with tab1:
     
     with col1:
         st.metric(
-            "Demanda Promedio Proyectada",
-            f"{demanda_total_prom:,.0f} MBTUD",
-            help="Demanda promedio nacional en el período"
+            "Demanda Promedio",
+            f"{demanda_total_prom:,.0f} MBTUD"
         )
-        st.caption(f"Pico: {demanda_total_max:,.0f} MBTUD")
+        st.caption(f"Pico: {demanda_total_max:,.0f}")
     
     # Precio Henry Hub Proyectado
     hh_prom = pred_modelo1_filtrado['Henry_Hub_pred'].mean()
@@ -142,11 +153,10 @@ with tab1:
     
     with col2:
         st.metric(
-            "Henry Hub Proyectado",
-            f"${hh_prom:.2f}/MMBtu",
-            help="Precio promedio proyectado"
+            "Henry Hub",
+            f"${hh_prom:.2f}/MMBtu"
         )
-        st.caption(f"Pico: ${hh_max:.2f}/MMBtu")
+        st.caption(f"Pico: ${hh_max:.2f}")
     
     # Precio TTF Proyectado
     ttf_prom = pred_modelo1_filtrado['TTF_pred'].mean()
@@ -154,11 +164,10 @@ with tab1:
     
     with col3:
         st.metric(
-            "TTF Proyectado",
-            f"${ttf_prom:.2f}/MMBtu",
-            help="Precio promedio proyectado Europa"
+            "TTF",
+            f"${ttf_prom:.2f}/MMBtu"
         )
-        st.caption(f"Pico: ${ttf_max:.2f}/MMBtu")
+        st.caption(f"Pico: ${ttf_max:.2f}")
     
     # Spread HH-TTF
     spread = ttf_prom - hh_prom
@@ -167,8 +176,7 @@ with tab1:
         st.metric(
             "Spread TTF - HH",
             f"${spread:.2f}/MMBtu",
-            delta=f"{(spread/hh_prom)*100:.1f}%",
-            help="Diferencia de precio entre mercados"
+            delta=f"{(spread/hh_prom)*100:.1f}%"
         )
     
     st.markdown("---")
@@ -329,25 +337,25 @@ with tab1:
 with tab2:
     st.header("Proyección Demanda Nacional")
     
-    # KPIs
+    # KPIs más compactos
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("Promedio", f"{demanda_total_prom:,.0f} MBTUD")
+        st.metric("Promedio", f"{demanda_total_prom:,.0f}")
     
     with col2:
-        st.metric("Máximo", f"{demanda_total_max:,.0f} MBTUD")
+        st.metric("Máximo", f"{demanda_total_max:,.0f}")
     
     with col3:
-        st.metric("Mínimo", f"{pred_modelo1_filtrado['Demanda_Total_pred'].min():,.0f} MBTUD")
+        st.metric("Mínimo", f"{pred_modelo1_filtrado['Demanda_Total_pred'].min():,.0f}")
     
     with col4:
         desv = pred_modelo1_filtrado['Demanda_Total_pred'].std()
-        st.metric("Desv. Std", f"{desv:,.0f} MBTUD")
+        st.metric("Desv. Std", f"{desv:,.0f}")
     
     with col5:
         cv = (desv / demanda_total_prom) * 100
-        st.metric("Coef. Variación", f"{cv:.1f}%")
+        st.metric("Coef. Var.", f"{cv:.1f}%")
     
     st.markdown("---")
     
@@ -477,7 +485,7 @@ with tab2:
 with tab3:
     st.header("Proyección por Zona Geográfica")
     
-    # KPIs por zona
+    # KPIs por zona más compactos
     costa_prom = pred_modelo2_filtrado['Demanda_Costa_Total_MBTUD_pred'].mean()
     interior_prom = pred_modelo2_filtrado['Demanda_Interior_Total_MBTUD_pred'].mean()
     total_zonas = costa_prom + interior_prom
@@ -486,7 +494,7 @@ with tab3:
     
     with col1:
         st.metric(
-            "🌊 Costa Atlántica",
+            "🌊 Costa",
             f"{costa_prom:,.0f} MBTUD",
             f"{(costa_prom/total_zonas)*100:.1f}%"
         )
@@ -670,7 +678,7 @@ with tab4:
     sector_sel = st.selectbox("Selecciona un sector:", list(sectores_map.keys()))
     col_name = sectores_map[sector_sel]
     
-    # KPIs del sector
+    # KPIs del sector más compactos
     sector_prom = pred_modelo2_filtrado[col_name].mean()
     sector_max = pred_modelo2_filtrado[col_name].max()
     sector_min = pred_modelo2_filtrado[col_name].min()
@@ -679,20 +687,20 @@ with tab4:
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("Promedio Proyectado", f"{sector_prom:,.0f} MBTUD")
+        st.metric("Promedio", f"{sector_prom:,.0f}")
     
     with col2:
-        st.metric("Máximo", f"{sector_max:,.0f} MBTUD")
+        st.metric("Máximo", f"{sector_max:,.0f}")
     
     with col3:
-        st.metric("Mínimo", f"{sector_min:,.0f} MBTUD")
+        st.metric("Mínimo", f"{sector_min:,.0f}")
     
     with col4:
         st.metric("Participación", f"{sector_pct:.1f}%")
     
     with col5:
         rango = sector_max - sector_min
-        st.metric("Rango", f"{rango:,.0f} MBTUD")
+        st.metric("Rango", f"{rango:,.0f}")
     
     st.markdown("---")
     
@@ -823,21 +831,19 @@ with tab4:
 with tab5:
     st.header("Precios Internacionales de Gas Natural")
     
-    # KPIs comparativos
+    # KPIs comparativos más compactos
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric(
-            "Henry Hub Promedio",
-            f"${hh_prom:.2f}/MMBtu",
-            help="Precio promedio proyectado EE.UU."
+            "Henry Hub",
+            f"${hh_prom:.2f}/MMBtu"
         )
     
     with col2:
         st.metric(
-            "TTF Promedio",
-            f"${ttf_prom:.2f}/MMBtu",
-            help="Precio promedio proyectado Europa"
+            "TTF",
+            f"${ttf_prom:.2f}/MMBtu"
         )
     
     with col3:
@@ -1038,13 +1044,25 @@ with tab6:
     
     if comp_precios:
         df_comp = pd.DataFrame(comp_precios)
+        
+        # Colorear según MAPE sin usar matplotlib
+        def color_mape(val):
+            if val < 5:
+                return 'background-color: #d4edda'
+            elif val < 10:
+                return 'background-color: #fff3cd'
+            elif val < 20:
+                return 'background-color: #f8d7da'
+            else:
+                return 'background-color: #f5c6cb'
+        
         st.dataframe(
             df_comp.style.format({
                 'MAPE (%)': '{:.2f}',
                 'R²': '{:.3f}',
                 'MAE': '{:.2f}',
                 'RMSE': '{:.2f}'
-            }).background_gradient(subset=['MAPE (%)'], cmap='RdYlGn_r'),
+            }).applymap(color_mape, subset=['MAPE (%)']),
             use_container_width=True,
             hide_index=True
         )
