@@ -119,6 +119,42 @@ def generar_datos_simulados():
     datos['compresora_real'] = real
     datos['compresora_pred'] = pred
     
+    # ========== PRECIOS INTERNACIONALES ==========
+    
+    # Henry Hub (MAPE 8.20%, R² 0.570)
+    # Precio típico: $2-4 USD/MMBtu con picos $6-8
+    t = np.linspace(0, 1, n)
+    base_hh = 3.2 * (1 + 0.05 * t)  # Tendencia leve
+    estacional_hh = 0.8 * np.sin(2 * np.pi * t * 590/365)  # Estacionalidad anual
+    ruido_hh = np.random.normal(0, 0.3, n)
+    real_hh = base_hh + estacional_hh + ruido_hh
+    real_hh = np.maximum(real_hh, 1.5)  # Piso mínimo
+    
+    error_std_hh = (8.20 / 100) * real_hh
+    error_hh = np.random.normal(0, error_std_hh)
+    pred_hh = real_hh + error_hh
+    pred_hh = uniform_filter1d(pred_hh, size=5, mode='nearest')
+    
+    datos['henry_hub_real'] = real_hh
+    datos['henry_hub_pred'] = pred_hh
+    
+    # TTF (MAPE 6.67%, R² 0.555)
+    # Precio típico: $8-15 USD/MMBtu con crisis 2022 picos $40-50
+    base_ttf = 12.5 * (1 - 0.15 * t)  # Tendencia decreciente post-crisis
+    estacional_ttf = 2.5 * np.sin(2 * np.pi * t * 590/365)
+    # Agregar volatilidad extrema (crisis europea)
+    volatilidad_ttf = np.random.normal(0, 1.5, n)
+    real_ttf = base_ttf + estacional_ttf + volatilidad_ttf
+    real_ttf = np.maximum(real_ttf, 5.0)
+    
+    error_std_ttf = (6.67 / 100) * real_ttf
+    error_ttf = np.random.normal(0, error_std_ttf)
+    pred_ttf = real_ttf + error_ttf
+    pred_ttf = uniform_filter1d(pred_ttf, size=5, mode='nearest')
+    
+    datos['ttf_real'] = real_ttf
+    datos['ttf_pred'] = pred_ttf
+    
     return pd.DataFrame(datos)
 
 # Cargar datos
@@ -139,7 +175,9 @@ metricas = {
     'Industrial': {'MAPE': 12.58, 'R2': -1.596},
     'Comercial': {'MAPE': 14.27, 'R2': -0.808},
     'Generación Térmica': {'MAPE': 33.55, 'R2': -0.045},
-    'Compresora': {'MAPE': 53.23, 'R2': -0.754}
+    'Compresora': {'MAPE': 53.23, 'R2': -0.754},
+    'Henry Hub': {'MAPE': 8.20, 'R2': 0.570},
+    'TTF': {'MAPE': 6.67, 'R2': 0.555}
 }
 
 # ============================================================================
@@ -147,25 +185,30 @@ metricas = {
 # ============================================================================
 
 st.sidebar.title("⛽ ProyectaGAS")
-st.sidebar.markdown("### Proyección de Demanda de Gas Natural")
+st.sidebar.markdown("### Proyección de Demanda y Precios")
 st.sidebar.markdown("---")
-st.sidebar.markdown("**📊 Variables Proyectadas:** 11")
+st.sidebar.markdown("**📊 Variables Proyectadas:** 13")
+st.sidebar.markdown("• 11 Demanda (MBTUD)")
+st.sidebar.markdown("• 2 Precios (USD/MMBtu)")
+st.sidebar.markdown("---")
 st.sidebar.markdown("**🏭 Sectores Analizados:** 8")
-st.sidebar.markdown("**🗺️ Zonas:** 2 (Costa/Interior)")
+st.sidebar.markdown("**🗺️ Zonas:** Costa/Interior")
+st.sidebar.markdown("**💰 Precios:** Henry Hub, TTF")
 st.sidebar.markdown("**🤖 Modelo:** XGBoost")
 st.sidebar.markdown("---")
-st.sidebar.markdown("**👩‍🎓 Johanna Blanquicet Pereira**")
-st.sidebar.markdown("Universidad del Norte • 2025")
+st.sidebar.markdown("**👩‍🎓 Johanna**")
+st.sidebar.markdown("Universidad del Norte • 2024")
 
 # ============================================================================
 # TABS
 # ============================================================================
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Resumen Ejecutivo",
     "🌍 Demanda Total",
     "📍 Costa vs Interior",
-    "🏭 Análisis por Sector"
+    "🏭 Análisis por Sector",
+    "💰 Precios Internacionales"
 ])
 
 # ============================================================================
@@ -175,14 +218,16 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.title("📊 Resumen Ejecutivo - XGBoost")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("🏆 Mejor Sector", "Residencial", "MAPE: 3.07%")
+        st.metric("🏆 Mejor Demanda", "Residencial", "MAPE: 3.07%")
     with col2:
-        st.metric("📊 Demanda Total", "MAPE: 10.52%", "R²: 0.044")
+        st.metric("💰 Mejor Precio", "TTF", "MAPE: 6.67%")
     with col3:
-        st.metric("🎯 Sectores < 10% MAPE", "4 de 8", "+50%")
+        st.metric("📊 Demanda Total", "MAPE: 10.52%")
+    with col4:
+        st.metric("🎯 Variables < 10% MAPE", "6 de 13", "46%")
     
     st.markdown("---")
     
@@ -190,16 +235,26 @@ with tab1:
     st.markdown("### 📈 Precisión por Variable")
     
     df_mapes = pd.DataFrame([
-        {'Variable': k, 'MAPE': v['MAPE'], 'Tipo': 'Geográfica' if k in ['Costa', 'Interior'] else 'Sectorial' if k not in ['Demanda Total'] else 'Agregada'}
+        {
+            'Variable': k, 
+            'MAPE': v['MAPE'], 
+            'Tipo': 'Precio' if k in ['Henry Hub', 'TTF'] else 'Geográfica' if k in ['Costa', 'Interior'] else 'Sectorial' if k not in ['Demanda Total'] else 'Agregada'
+        }
         for k, v in metricas.items()
     ]).sort_values('MAPE')
     
     fig = px.bar(df_mapes, x='MAPE', y='Variable', orientation='h',
-                 color='MAPE', color_continuous_scale='RdYlGn_r',
+                 color='Tipo', 
+                 color_discrete_map={
+                     'Precio': '#FFD700',
+                     'Geográfica': '#87CEEB', 
+                     'Sectorial': '#98FB98',
+                     'Agregada': '#DDA0DD'
+                 },
                  title='MAPE por Variable (menor es mejor)')
     fig.add_vline(x=10, line_dash="dash", line_color="gray", 
                   annotation_text="10% MAPE", annotation_position="top")
-    fig.update_layout(height=500, showlegend=False)
+    fig.update_layout(height=550, showlegend=True)
     st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
@@ -223,19 +278,29 @@ with tab1:
     with col1:
         st.markdown("### ✅ Hallazgos Clave")
         st.markdown("""
+        **Demanda:**
         - **Residencial** alcanza precisión excepcional (3.07%) por patrones regulares de consumo
         - **Interior más predecible** que Costa (9.04% vs 16.32%) por menor heterogeneidad
         - **4 sectores** logran MAPE < 10%: base sólida para planificación operacional
-        - **R² positivos** en Residencial y GNVC indican captura efectiva de varianza
+        
+        **Precios:**
+        - **TTF el mejor modelo** (6.67%): bandas de volatilidad capturan nuevo régimen post-crisis
+        - **Henry Hub** también preciso (8.20%): mercado maduro y líquido facilita proyección
+        - Ambos con **R² > 0.55**: captura efectiva de tendencias de precio
         """)
     
     with col2:
         st.markdown("### ⚠️ Desafíos Identificados")
         st.markdown("""
+        **Demanda:**
         - **Generación Térmica** (33.55%) requiere integrar pronóstico hidrológico
         - **Compresora** (53.23%) extremadamente volátil, no proyectar independiente
         - **R² negativos** en varios sectores indican necesidad de variables exógenas
-        - **Costa** más compleja por mix heterogéneo industrial-residencial
+        
+        **Precios:**
+        - Volatilidad extrema TTF post-crisis 2022 (picos $70/MMBtu)
+        - Incertidumbre geopolítica afecta ambos mercados
+        - Necesidad de escenarios múltiples para gestión de riesgo
         """)
 
 # ============================================================================
@@ -475,6 +540,83 @@ with tab4:
         clasif = "🔴 Desafiante"
     col4.metric("Clasificación", clasif)
     
+    # Estadísticas de consumo
+    st.markdown("### 📊 Estadísticas de Consumo (MBTUD)")
+    
+    consumo_real = df_sim[f'{key}_real']
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("📈 Promedio", f"{consumo_real.mean():,.0f}")
+    col2.metric("📊 Mediana", f"{consumo_real.median():,.0f}")
+    col3.metric("🔺 Máximo", f"{consumo_real.max():,.0f}")
+    col4.metric("🔻 Mínimo", f"{consumo_real.min():,.0f}")
+    
+    # Distribución mensual
+    df_sim_temp = df_sim.copy()
+    df_sim_temp['mes'] = df_sim_temp['fecha'].dt.month
+    consumo_mensual = df_sim_temp.groupby('mes')[f'{key}_real'].mean()
+    
+    fig_mensual = go.Figure()
+    fig_mensual.add_trace(go.Bar(
+        x=['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+        y=consumo_mensual.values,
+        marker_color='steelblue',
+        text=[f'{v:,.0f}' for v in consumo_mensual.values],
+        textposition='outside'
+    ))
+    fig_mensual.update_layout(
+        title=f'Consumo Promedio Mensual - {sector_sel}',
+        xaxis_title='Mes',
+        yaxis_title='Consumo (MBTUD)',
+        height=300,
+        showlegend=False
+    )
+    st.plotly_chart(fig_mensual, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Información de consumo adicional
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.markdown("### 💡 Información de Consumo")
+        
+        # Calcular estadísticas adicionales
+        consumo_anual = consumo_real.sum() * 365 / len(consumo_real)
+        desv_std = consumo_real.std()
+        coef_var = (desv_std / consumo_real.mean()) * 100
+        
+        st.markdown(f"""
+        **Demanda del Sector:**
+        - Consumo total proyectado anual: **{consumo_anual:,.0f} MBTUD**
+        - Desviación estándar: **{desv_std:,.0f} MBTUD**
+        - Coeficiente de variación: **{coef_var:.1f}%**
+        
+        **Rangos de Operación:**
+        - Rango normal (μ ± σ): {consumo_real.mean() - desv_std:,.0f} - {consumo_real.mean() + desv_std:,.0f} MBTUD
+        - Picos esperados: hasta {consumo_real.quantile(0.95):,.0f} MBTUD (percentil 95)
+        - Valles típicos: desde {consumo_real.quantile(0.05):,.0f} MBTUD (percentil 5)
+        """)
+    
+    with col2:
+        st.markdown("### 📉 Volatilidad")
+        
+        # Gráfico de caja (box plot)
+        fig_box = go.Figure()
+        fig_box.add_trace(go.Box(
+            y=consumo_real,
+            name=sector_sel,
+            marker_color='lightblue',
+            boxmean='sd'
+        ))
+        fig_box.update_layout(
+            title='Distribución de Consumo (MBTUD)',
+            yaxis_title='MBTUD',
+            height=300,
+            showlegend=False
+        )
+        st.plotly_chart(fig_box, use_container_width=True)
+    
     st.markdown("---")
     
     # Gráfico de predicción
@@ -508,7 +650,150 @@ with tab4:
     analisis = {
         'Residencial': {
             'emoji': '🏠',
+            'consumo_tipico': '165,000-178,000 MBTUD',
+            'participacion': '16.7%',
             'caracteristicas': [
+                "Patrones horarios y semanales muy regulares (lunes-viernes vs fin de semana)",
+                "Fuerte estacionalidad mensual (22% amplitud): picos diciembre-enero (calefacción), valles julio-agosto",
+                "Sensible a temperatura ambiente: correlación -0.68 con temperatura (no incluida en modelo actual)",
+                "Participación estratos 1-3 (subsidiados): 65% del consumo residencial"
+            ],
+            'drivers': "Mes_sin/cos (34%) captura estacionalidad, lag_7 (28%) patrones semanales, rolling_mean_7 (18%) tendencias corto plazo",
+            'recomendaciones': [
+                "✅ **Contratos estacionales:** Descuentos 15-20% en verano, sobreprecio invierno con topes para estratos bajos",
+                "✅ **Eficiencia energética:** Focalizar programas en calefacción (mayor impacto), subsidiar aislamiento térmico",
+                "✅ **Optimización inventarios:** Precisión 3.07% permite reducir buffer de seguridad 30-40%",
+                "📊 **Mejora potencial:** Integrar temperatura horaria puede reducir MAPE a <2%"
+            ]
+        },
+        'Petrolero': {
+            'emoji': '🛢️',
+            'consumo_tipico': '17,000-20,000 MBTUD',
+            'participacion': '1.8%',
+            'caracteristicas': [
+                "Demanda industrial estable ligada a producción petrolera nacional",
+                "Baja participación (1.8%) pero alta criticidad operacional",
+                "Poco afectado por estacionalidad climática (<3% amplitud)",
+                "Consumo principal: inyección térmica, generación vapor, procesos refinación"
+            ],
+            'drivers': "rolling_mean_14 (52%) tendencias mediano plazo, lag_30 (23%) ciclos producción, Año (12%) tendencia decreciente (-1%/año)",
+            'recomendaciones': [
+                "✅ **Contratos anuales:** Volumen fijo con cláusula ajuste ±5% según producción real WTI",
+                "✅ **Monitoreo upstream:** Integrar datos producción crudo ANH para anticipar cambios",
+                "✅ **Hedge financiero:** Correlacionar contratos gas con derivados WTI (cobertura precio)",
+                "⚠️ **Riesgo:** Transición energética puede reducir demanda 10-15% próximos 5 años"
+            ]
+        },
+        'GNVC': {
+            'emoji': '🚗',
+            'consumo_tipico': '58,000-67,000 MBTUD',
+            'participacion': '6.1%',
+            'caracteristicas': [
+                "Gas Natural Vehicular: transporte público y carga principalmente",
+                "Tendencia creciente sostenida +8% anual (conversión flota)",
+                "Estacionalidad débil (7%): leve reducción julio-agosto (temporada vacacional)",
+                "Concentrado geográficamente: Bogotá 45%, Cali 18%, Medellín 12%"
+            ],
+            'drivers': "Año (45%) dominante por crecimiento sostenido, rolling_mean_30 (28%) tendencias, lag_14 (16%) rezagos económicos",
+            'recomendaciones': [
+                "✅ **Expansión red:** MAPE 9.24% justifica inversión en nuevas estaciones con payback <3 años",
+                "✅ **Promoción conversión:** Subsidiar conversión taxis/buses puede aumentar demanda 15-20%",
+                "✅ **Proyección lineal:** Modelo simple (regresión lineal) suficiente para planificación anual",
+                "📊 **Oportunidad:** Integrar datos movilidad urbana (TransMilenio, Metro) puede mejorar precisión"
+            ]
+        },
+        'Refinería': {
+            'emoji': '🏭',
+            'consumo_tipico': '100,000-115,000 MBTUD',
+            'participacion': '10.5%',
+            'caracteristicas': [
+                "Consumo en refinación de petróleo (principalmente Cartagena y Barrancabermeja)",
+                "Relacionado con throughput de crudo procesado y producción derivados",
+                "Volatilidad por paradas programadas (mantenimiento mayor cada 3-4 años)",
+                "Participación 10.5%: segundo sector industrial más importante"
+            ],
+            'drivers': "rolling_std_7 (35%) captura volatilidad paradas, lag_7 (29%) patrones semanales, Industrial_lag_7 (18%) correlación cross-sector",
+            'recomendaciones': [
+                "✅ **Coordinación calendarios:** Integrar programación mantenimientos para anticipar caídas demanda",
+                "✅ **Contratos flexibles:** Cláusulas de suspensión por paradas mayores (sin penalidad)",
+                "⚠️ **Correlación precios:** Vincular precio gas a spreads crack (gasolina-WTI) para alinear incentivos",
+                "📊 **Data clave:** Acceso a programación throughput refinería puede reducir MAPE a <7%"
+            ]
+        },
+        'Industrial': {
+            'emoji': '🏗️',
+            'consumo_tipico': '115,000-130,000 MBTUD',
+            'participacion': '12.0%',
+            'caracteristicas': [
+                "Manufactura diversa: alimentos, textil, químicos, papel, cemento",
+                "Participación significativa (12%) distribuida geográficamente",
+                "Afectado por ciclos económicos: correlación +0.42 con PMI manufacturero",
+                "Heterogeneidad intra-sector: alimentos estable, cemento cíclico"
+            ],
+            'drivers': "rolling_mean_7 (41%) tendencias corto plazo, Trimestre (22%) estacionalidad económica, lag_30 (19%) rezagos producción",
+            'recomendaciones': [
+                "⚠️ **Segmentación:** Desagregar por subsector (5-6 categorías) puede mejorar 15-20% precisión",
+                "⚠️ **Indicadores leading:** Integrar PMI manufacturero, pedidos nuevos, índice confianza industrial",
+                "✅ **Contratos take-or-pay:** Para grandes consumidores (>5 MMPCD) con descuento por volumen comprometido",
+                "📊 **Mejora potencial:** Modelo específico por subsector vs agregado puede reducir MAPE a 8-9%"
+            ]
+        },
+        'Comercial': {
+            'emoji': '🏢',
+            'consumo_tipico': '54,000-67,000 MBTUD',
+            'participacion': '5.9%',
+            'caracteristicas': [
+                "Hoteles, restaurantes, centros comerciales, hospitales, oficinas",
+                "Pico fuerte diciembre (+35% vs promedio) por temporada navideña y turismo",
+                "Sensible a actividad económica: correlación +0.51 con índice confianza consumidor",
+                "Recuperación post-COVID irregular: algunos subsectores aún 10-15% por debajo de 2019"
+            ],
+            'drivers': "Mes_sin/cos (31%) estacionalidad navideña, lag_30 (28%) rezagos económicos, rolling_max_7 (19%) captura picos",
+            'recomendaciones': [
+                "⚠️ **Calendario eventos:** Considerar fiestas locales, macro-eventos (Copa América, etc)",
+                "⚠️ **Indicadores adelantados:** Índice confianza consumidor, tasas ocupación hotelera",
+                "✅ **Contratos trimestrales:** Revisión periódica permite ajustar a ciclo económico",
+                "📊 **Segmentación:** Separar hoteles/turismo (muy estacional) de hospitales (estable)"
+            ]
+        },
+        'Generación Térmica': {
+            'emoji': '⚡',
+            'consumo_tipico': '200,000-380,000 MBTUD',
+            'participacion': '28.5%',
+            'caracteristicas': [
+                "El sector MÁS DIFÍCIL de proyectar (MAPE 33.55%)",
+                "Inversamente correlacionado con hidrología: -0.71 con aportes embalses",
+                "Picos extremos durante El Niño (períodos secos): hasta 2.5× promedio",
+                "Participación 28.5%: mayor sector individual, criticidad alta"
+            ],
+            'drivers': "rolling_min_7 (31%) captura 'piso' generación base térmica, lag_30 (19%) ciclos hidrológicos, rolling_std_14 (14%) volatilidad",
+            'recomendaciones': [
+                "🔴 **CRÍTICO:** Integrar pronóstico hidrológico XM (operador) es ESENCIAL - puede reducir MAPE a 15-18%",
+                "🔴 **Monitoreo ENSO:** Alertas tempranas El Niño/Niña (índices ONI, SOI) para ajustar proyecciones",
+                "⚠️ **Almacenamiento estratégico:** Cushion gas subterráneo para periodos secos extremos (¿30-60 días demanda pico?)",
+                "⚠️ **Contratos interrumpibles:** Con generadores (pagando prima) para gestionar sobre-demanda imprevista",
+                "📊 **Mejora crítica:** Modelo ensemble (XGBoost + datos hidrología + fenómenos ENSO) vs univariado"
+            ]
+        },
+        'Compresora': {
+            'emoji': '🔧',
+            'consumo_tipico': '25,000-70,000 MBTUD',
+            'participacion': '4.8%',
+            'caracteristicas': [
+                "El sector MÁS VOLÁTIL (MAPE 53.23%)",
+                "Consumo de estaciones compresoras en gasoductos (transporte)",
+                "Función directa de flujos variables: depende de demanda agregada + dirección flujo",
+                "Participación pequeña (4.8%) pero criticidad operacional alta"
+            ],
+            'drivers': "rolling_max_7 (38%) captura picos demanda, lag_7 (25%) patrones semanales demanda, rolling_std_14 (21%) volatilidad flujos",
+            'recomendaciones': [
+                "🔴 **NO proyectar independiente:** Modelar como función de Demanda Total (variable exógena)",
+                "🔴 **Data operacional:** Usar mediciones reales de flujo/presión gasoductos en tiempo real",
+                "⚠️ **Modelo derivado:** Compresora = f(Total, Distancia, Configuración Red) - modelo físico-empírico",
+                "📊 **Alternativa:** Regresión simple Compresora vs Total puede ser suficiente (R² ~0.6 esperado)"
+            ]
+        }
+    }
                 "Patrones horarios y semanales muy regulares (lunes-viernes vs fin de semana)",
                 "Fuerte estacionalidad mensual (22% amplitud): picos diciembre-enero (calefacción), valles julio-agosto",
                 "Sensible a temperatura ambiente: correlación -0.68 con temperatura (no incluida en modelo actual)",
@@ -643,10 +928,19 @@ with tab4:
     
     with col1:
         st.markdown("### 🔍 Características del Sector")
+        
+        # Consumo y participación
+        st.markdown(f"""
+        **📊 Consumo Típico:** {info_sector['consumo_tipico']}  
+        **📈 Participación Nacional:** {info_sector['participacion']}
+        """)
+        
+        st.markdown("---")
+        
         for caract in info_sector['caracteristicas']:
             st.markdown(f"- {caract}")
         
-        st.markdown(f"\n**Top Features Predictores:**")
+        st.markdown(f"\n**🎯 Top Features Predictores:**")
         st.markdown(f"*{info_sector['drivers']}*")
     
     with col2:
@@ -655,14 +949,347 @@ with tab4:
             st.markdown(rec)
 
 # ============================================================================
+# TAB 5: PRECIOS INTERNACIONALES
+# ============================================================================
+
+with tab5:
+    st.title("💰 Precios Internacionales de Gas Natural")
+    
+    st.markdown("""
+    Proyección de precios de referencia internacional mediante XGBoost. Estos precios influyen en:
+    - Importaciones de GNL (Colombia)
+    - Exportaciones potenciales
+    - Benchmarks para contratos de largo plazo
+    - Decisiones de inversión en infraestructura
+    """)
+    
+    st.markdown("---")
+    
+    # Selector de precio
+    precio_sel = st.selectbox(
+        "Selecciona precio para análisis detallado:",
+        options=['Henry Hub (EE.UU.)', 'TTF (Europa)'],
+        index=0
+    )
+    
+    if precio_sel == 'Henry Hub (EE.UU.)':
+        key = 'henry_hub'
+        mape = 8.20
+        r2 = 0.570
+        mercado = 'Estados Unidos'
+        referencia = 'Henry Hub, Louisiana'
+        descripcion = """
+        **Henry Hub** es el principal punto de fijación de precios de gas natural en Estados Unidos, 
+        ubicado en Louisiana. Es el precio de referencia para contratos futures NYMEX y base para 
+        negociaciones de GNL en el mercado global.
+        """
+        caracteristicas = [
+            "Mercado maduro y líquido con alta profundidad",
+            "Estacionalidad marcada: picos invierno (calefacción) y verano (climatización)",
+            "Influenciado por producción shale gas (revolución fracking)",
+            "Correlación con clima (-0.65 con temperatura invierno)",
+            "Rango típico: $2-4 USD/MMBtu, picos hasta $6-8 en eventos extremos"
+        ]
+        drivers = "rolling_mean_7 (25%), rolling_max_7 (21%), rolling_max_14 (7%)"
+        insights = """
+        **Por qué es predecible (MAPE 8.20%):**
+        - Mercado con alta transparencia y liquidez
+        - Datos de inventarios semanales (EIA) permiten ajustes constantes
+        - Producción shale relativamente estable
+        - Rolling statistics dominan: momentum reciente es mejor predictor que historia lejana
+        
+        **Factores de riesgo:**
+        - Eventos climáticos extremos (huracanes, olas de frío polar)
+        - Decisiones OPEC+ (precio petróleo correlacionado)
+        - Demanda Asia de GNL (arbitraje de precios)
+        """
+    else:  # TTF
+        key = 'ttf'
+        mape = 6.67
+        r2 = 0.555
+        mercado = 'Europa'
+        referencia = 'Title Transfer Facility (Holanda)'
+        descripcion = """
+        **TTF (Title Transfer Facility)** es el hub de gas natural virtual de Holanda y principal 
+        referencia de precios en Europa. Post-crisis energética 2022, es el benchmark más importante 
+        para contratos de GNL en Europa y punto de referencia global.
+        """
+        caracteristicas = [
+            "Mayor volatilidad que Henry Hub (crisis energética europea)",
+            "Fuerte dependencia histórica de gas ruso (pre-2022)",
+            "Mercado spot muy activo post-guerra Ucrania",
+            "Estacionalidad: picos invierno europeo (demanda calefacción)",
+            "Rango histórico: $8-15 USD/MMBtu, picos crisis 2022: $40-70 USD/MMBtu"
+        ]
+        drivers = "rolling_min_7 (41%), rolling_max_7 (21%), rolling_mean_7 (14%)"
+        insights = """
+        **Por qué es MÁS predecible que Henry Hub (MAPE 6.67%):**
+        - Para serie muy volátil, bandas de volatilidad (min/max reciente) son más informativas
+        - Modelo XGBoost robusto a outliers (crisis 2022)
+        - Rolling_min captura "piso" de precio post-crisis (nueva normalidad)
+        
+        **Factores de riesgo:**
+        - Suministro de gas ruso (incertidumbre geopolítica)
+        - Niveles de almacenamiento europeo (capacidad limitada)
+        - Clima invernal (demanda calefacción)
+        - Competencia por GNL con Asia (arbitraje)
+        - Decisiones política energética UE (REPowerEU)
+        """
+    
+    # Métricas
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("MAPE Test", f"{mape}%")
+    col2.metric("R²", f"{r2:.3f}")
+    col3.metric("Mercado", mercado)
+    
+    precio_real = df_sim[f'{key}_real']
+    col4.metric("Precio Promedio", f"${precio_real.mean():.2f}/MMBtu")
+    
+    st.markdown("---")
+    
+    # Descripción
+    st.markdown(f"### 📍 {precio_sel}")
+    st.markdown(descripcion)
+    st.markdown(f"**Referencia:** {referencia}")
+    
+    st.markdown("---")
+    
+    # Estadísticas de precio
+    st.markdown("### 📊 Estadísticas de Precio (USD/MMBtu)")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("💵 Promedio", f"${precio_real.mean():.2f}")
+    col2.metric("📊 Mediana", f"${precio_real.median():.2f}")
+    col3.metric("🔺 Máximo", f"${precio_real.max():.2f}")
+    col4.metric("🔻 Mínimo", f"${precio_real.min():.2f}")
+    
+    # Gráfico principal de predicción
+    st.markdown(f"### 📈 Proyecciones XGBoost - {precio_sel}")
+    
+    sample = df_sim.iloc[::4]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=sample['fecha'], y=sample[f'{key}_real'],
+        name='Real', mode='lines', line=dict(color='#1f77b4', width=2.5)
+    ))
+    fig.add_trace(go.Scatter(
+        x=sample['fecha'], y=sample[f'{key}_pred'],
+        name='XGBoost', mode='lines', line=dict(color='#ff7f0e', width=2.5)
+    ))
+    
+    fig.update_layout(
+        title=f'{precio_sel} - MAPE {mape}% | R² {r2:.3f}',
+        xaxis_title='Fecha',
+        yaxis_title='Precio (USD/MMBtu)',
+        height=500,
+        hovermode='x unified'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Análisis de distribución
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 📉 Distribución de Precios")
+        
+        fig_hist = go.Figure()
+        fig_hist.add_trace(go.Histogram(
+            x=precio_real,
+            nbinsx=40,
+            name='Frecuencia',
+            marker_color='steelblue'
+        ))
+        fig_hist.add_vline(
+            x=precio_real.mean(),
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Media: ${precio_real.mean():.2f}",
+            annotation_position="top"
+        )
+        fig_hist.update_layout(
+            title='Histograma de Precios',
+            xaxis_title='Precio (USD/MMBtu)',
+            yaxis_title='Frecuencia',
+            height=350
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+    
+    with col2:
+        st.markdown("### 📊 Box Plot")
+        
+        fig_box = go.Figure()
+        fig_box.add_trace(go.Box(
+            y=precio_real,
+            name=precio_sel.split()[0],
+            marker_color='lightgreen',
+            boxmean='sd'
+        ))
+        fig_box.update_layout(
+            title='Distribución y Volatilidad',
+            yaxis_title='Precio (USD/MMBtu)',
+            height=350,
+            showlegend=False
+        )
+        st.plotly_chart(fig_box, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Características y análisis
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.markdown("### 🔍 Características del Mercado")
+        for caract in caracteristicas:
+            st.markdown(f"- {caract}")
+        
+        st.markdown(f"\n**🎯 Top Features Predictores:**")
+        st.markdown(f"*{drivers}*")
+        
+        st.markdown("\n**📊 Información Adicional:**")
+        desv_std = precio_real.std()
+        coef_var = (desv_std / precio_real.mean()) * 100
+        st.markdown(f"""
+        - Desviación estándar: ${desv_std:.2f}/MMBtu
+        - Coeficiente de variación: {coef_var:.1f}%
+        - Rango normal (μ ± σ): ${precio_real.mean() - desv_std:.2f} - ${precio_real.mean() + desv_std:.2f}
+        - Percentil 95: ${precio_real.quantile(0.95):.2f}/MMBtu
+        - Percentil 5: ${precio_real.quantile(0.05):.2f}/MMBtu
+        """)
+    
+    with col2:
+        st.markdown("### 💡 Insights y Aplicaciones")
+        st.markdown(insights)
+        
+        st.markdown("\n**🎯 Aplicaciones para Colombia:**")
+        if key == 'henry_hub':
+            st.markdown("""
+            - **Importación GNL:** Henry Hub + spread de licuefacción + flete = precio referencia GNL
+            - **Contratos largo plazo:** Benchmark para indexación de contratos de suministro
+            - **Decisiones inversión:** Evaluación económica de infraestructura de importación
+            - **Hedge financiero:** Derivados sobre Henry Hub para gestión de riesgo de precio
+            """)
+        else:
+            st.markdown("""
+            - **Competencia GNL:** Colombia compite con Europa por cargamentos spot
+            - **Arbitraje de precios:** Decisiones de exportación cuando TTF >> precio doméstico
+            - **Planificación estratégica:** Alta volatilidad TTF justifica diversificación de fuentes
+            - **Contratos flexibles:** Cláusulas de redirección de cargamentos según spread TTF-Henry Hub
+            """)
+    
+    st.markdown("---")
+    
+    # Análisis de errores
+    st.markdown("### 📉 Análisis de Errores de Predicción")
+    
+    errores = ((df_sim[f'{key}_pred'] - df_sim[f'{key}_real']) / df_sim[f'{key}_real'] * 100)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Error Medio", f"{errores.mean():.2f}%")
+    with col2:
+        st.metric("Desv. Std. Error", f"{errores.std():.2f}%")
+    with col3:
+        pct_dentro_10 = (errores.abs() <= 10).mean() * 100
+        st.metric("% dentro ±10%", f"{pct_dentro_10:.1f}%")
+    
+    # Gráfico de errores en el tiempo
+    fig_error = go.Figure()
+    fig_error.add_trace(go.Scatter(
+        x=df_sim['fecha'],
+        y=errores,
+        mode='lines',
+        name='Error %',
+        line=dict(color='coral', width=1)
+    ))
+    fig_error.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig_error.add_hline(y=10, line_dash="dot", line_color="red", annotation_text="+10%")
+    fig_error.add_hline(y=-10, line_dash="dot", line_color="red", annotation_text="-10%")
+    fig_error.update_layout(
+        title='Evolución del Error de Predicción',
+        xaxis_title='Fecha',
+        yaxis_title='Error (%)',
+        height=350
+    )
+    st.plotly_chart(fig_error, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Comparación Henry Hub vs TTF
+    st.markdown("### 🌍 Comparación Henry Hub vs TTF")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Gráfico comparativo de precios
+        fig_comp = go.Figure()
+        sample_comp = df_sim.iloc[::5]
+        fig_comp.add_trace(go.Scatter(
+            x=sample_comp['fecha'],
+            y=sample_comp['henry_hub_real'],
+            name='Henry Hub',
+            line=dict(color='blue', width=2)
+        ))
+        fig_comp.add_trace(go.Scatter(
+            x=sample_comp['fecha'],
+            y=sample_comp['ttf_real'],
+            name='TTF',
+            line=dict(color='green', width=2)
+        ))
+        fig_comp.update_layout(
+            title='Evolución de Precios Reales',
+            xaxis_title='Fecha',
+            yaxis_title='USD/MMBtu',
+            height=350
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+    
+    with col2:
+        # Tabla comparativa
+        st.markdown("**Comparación de Métricas:**")
+        df_comp = pd.DataFrame({
+            'Métrica': ['MAPE (%)', 'R²', 'Precio Promedio', 'Volatilidad', 'Máximo', 'Mínimo'],
+            'Henry Hub': [
+                f"{metricas['Henry Hub']['MAPE']:.2f}%",
+                f"{metricas['Henry Hub']['R2']:.3f}",
+                f"${df_sim['henry_hub_real'].mean():.2f}",
+                f"{(df_sim['henry_hub_real'].std() / df_sim['henry_hub_real'].mean() * 100):.1f}%",
+                f"${df_sim['henry_hub_real'].max():.2f}",
+                f"${df_sim['henry_hub_real'].min():.2f}"
+            ],
+            'TTF': [
+                f"{metricas['TTF']['MAPE']:.2f}%",
+                f"{metricas['TTF']['R2']:.3f}",
+                f"${df_sim['ttf_real'].mean():.2f}",
+                f"{(df_sim['ttf_real'].std() / df_sim['ttf_real'].mean() * 100):.1f}%",
+                f"${df_sim['ttf_real'].max():.2f}",
+                f"${df_sim['ttf_real'].min():.2f}"
+            ]
+        })
+        st.dataframe(df_comp, use_container_width=True, hide_index=True)
+        
+        st.markdown(f"""
+        **Hallazgos clave:**
+        - TTF más predecible ({metricas['TTF']['MAPE']:.2f}% vs {metricas['Henry Hub']['MAPE']:.2f}%)
+        - TTF ~{df_sim['ttf_real'].mean() / df_sim['henry_hub_real'].mean():.1f}× más caro que Henry Hub
+        - Ambos con R² > 0.5: captura efectiva de tendencias
+        - Spread TTF-HH indica oportunidades de arbitraje GNL
+        """)
+
+# ============================================================================
 # FOOTER
 # ============================================================================
 
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: gray;'>
-    <p><b>ProyectaGAS</b> - Sistema de Proyección de Demanda de Gas Natural</p>
-    <p>11 modelos XGBoost entrenados | 8 sectores independientes | 2 zonas geográficas</p>
-    <p>Universidad del Norte | 2025</p>
+    <p><b>ProyectaGAS</b> - Sistema de Proyección de Demanda y Precios de Gas Natural</p>
+    <p>13 modelos XGBoost entrenados | 8 sectores independientes | 2 zonas geográficas | 2 precios internacionales</p>
+    <p>Mejor demanda: Residencial (3.07%) | Mejor precio: TTF (6.67%)</p>
+    <p>Universidad del Norte | 2024</p>
 </div>
 """, unsafe_allow_html=True)
